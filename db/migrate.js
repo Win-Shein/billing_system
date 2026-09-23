@@ -66,6 +66,40 @@ function migrate(raw) {
       PRIMARY KEY (org_id, year)
     );
   `);
+
+  /* ---- expenses: business costs for German EÜR (Betriebsausgaben) ------- */
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      org_id        INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      expense_date  TEXT    NOT NULL,
+      category      TEXT    NOT NULL,
+      description   TEXT,
+      supplier      TEXT,
+      amount_gross  REAL    NOT NULL DEFAULT 0,
+      vat_rate      REAL    NOT NULL DEFAULT 0,
+      vat_amount    REAL    NOT NULL DEFAULT 0,
+      payment_method TEXT,
+      document_ref  TEXT,
+      notes         TEXT,
+      created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_expenses_org ON expenses(org_id);');
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);');
+
+  /* ---- expense_categories: user-editable EÜR categories ------------------ */
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS expense_categories (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      org_id     INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      name       TEXT    NOT NULL,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (org_id, name)
+    );
+  `);
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_expense_categories_org ON expense_categories(org_id);');
 }
 
 module.exports = { migrate, columnExists, addColumn };

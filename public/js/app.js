@@ -105,6 +105,15 @@ const MM = {
   // Payments / filters
   'Search…': 'ရှာဖွေရန်…', 'All methods': 'နည်းလမ်းအားလုံး', paypal: 'PayPal', debitcard: 'Debit Card', bank: 'ဘဏ်',
   'No payments yet': 'ငွေပေးချေမှု မရှိသေးပါ',
+  // Expenses (EÜR)
+  Expenses: 'ကုန်ကျစရိတ်', Expense: 'ကုန်ကျစရိတ်', '+ New Expense': '+ ကုန်ကျစရိတ်အသစ်',
+  'New Expense': 'ကုန်ကျစရိတ်အသစ်', 'Edit Expense': 'ကုန်ကျစရိတ် ပြင်ရန်', 'Save Expense': 'ကုန်ကျစရိတ် သိမ်းမည်',
+  'Expense Date': 'ကုန်ကျရက်', Supplier: 'ပေးသွင်းသူ', 'Document Ref': 'Beleg နံပါတ်',
+  'VAT %': 'VAT %', 'Gross (€)': 'စုစုပေါင်း (€)',
+  'EÜR Export': 'EÜR ထုတ်မည်', 'Income (EUR)': 'ဝင်ငွေ (EUR)', 'Expenses (EUR)': 'ကုန်ကျစရိတ် (EUR)',
+  'Net Profit': 'အသားတင်အမြတ်', 'Expenses & Profit (EÜR)': 'ကုန်ကျစရိတ် & အမြတ် (EÜR)',
+  'Gateway Fees': 'Gateway ကြေး', Categories: 'အမျိုးအစားများ', 'New category name': 'အမျိုးအစားအသစ် အမည်',
+  Add: 'ထည့်မည်',
   // Settings
   'Company Logo': 'ကုမ္ပဏီ Logo', 'Company Details': 'ကုမ္ပဏီ အချက်အလက်', 'Billing Preferences': 'ငွေတောင်းခံမှု ဆက်တင်',
   Language: 'ဘာသာစကား', 'Save Settings': 'ဆက်တင် သိမ်းမည်', 'Remove logo': 'Logo ဖယ်ရှား',
@@ -460,6 +469,184 @@ async function editItem(id) {
       toast(t('Save'), 'success'); closeModal(); renderItems();
     } catch (e) { toast(e.message, 'error'); }
   };
+}
+
+/* ============================================================
+   Expenses (EÜR / Betriebsausgaben)
+   ============================================================ */
+let expenseCategories = [];
+async function loadExpenseCategories() {
+  expenseCategories = await get('/expense-categories');
+  return expenseCategories;
+}
+
+let expCatFilter = '';
+let expFrom = '';
+let expTo = '';
+
+route('expenses', async () => {
+  $('#topbar-actions').innerHTML = canWrite() ? `
+    <button class="btn" id="manage-cats">⚙️ ${t('Categories')}</button>
+    <button class="btn btn-primary" id="add-exp">${t('+ New Expense')}</button>` : '';
+  const add = $('#add-exp'); if (add) add.onclick = () => editExpense();
+  const mc = $('#manage-cats'); if (mc) mc.onclick = () => manageExpenseCategories();
+  await renderExpenses();
+});
+
+async function renderExpenses() {
+  await loadExpenseCategories();
+  const qs = new URLSearchParams();
+  if (expCatFilter) qs.set('category', expCatFilter);
+  if (expFrom) qs.set('from', expFrom);
+  if (expTo) qs.set('to', expTo);
+  const data = await get('/expenses?' + qs.toString());
+  const rows = data.rows;
+
+  $('#view').innerHTML = `
+    <div class="toolbar">
+      <label class="muted">${t('From')}</label><input type="date" id="exp-from" value="${expFrom}" style="max-width:150px">
+      <label class="muted">${t('To')}</label><input type="date" id="exp-to" value="${expTo}" style="max-width:150px">
+      <button class="btn btn-sm" id="exp-year">${t('This Year')}</button>
+      <button class="btn btn-sm" id="exp-all">${t('All Dates')}</button>
+      <select id="exp-cat" style="max-width:220px">
+        <option value="">${t('All')} — ${t('Category')}</option>
+        ${expenseCategories.map((c) => `<option value="${esc(c.name)}" ${expCatFilter === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <span class="spacer"></span>
+      <button class="btn btn-sm" id="exp-export">${t('⬇ Export Excel')}</button>
+    </div>
+    <div class="table-wrap">
+      <table class="grid-table">
+        <thead><tr><th class="num" style="width:44px">${t('#')}</th><th>${t('Date')}</th><th>${t('Category')}</th><th>${t('Description')}</th><th>${t('Supplier')}</th><th class="num">${t('VAT %')}</th><th class="num">${t('Amount')} (€)</th><th style="width:120px">${t('Actions')}</th></tr></thead>
+        <tbody>
+          ${rows.map((e, idx) => `
+            <tr>
+              <td class="num muted">${idx + 1}</td>
+              <td>${esc(e.expense_date)}</td>
+              <td>${esc(e.category)}</td>
+              <td>${esc(e.description || '')}</td>
+              <td>${esc(e.supplier || '')}</td>
+              <td class="num">${e.vat_rate}%</td>
+              <td class="num mono">€ ${fmt(e.amount_gross)}</td>
+              <td class="num" style="white-space:nowrap">
+                ${canWrite() ? `<button class="btn btn-sm" data-edit="${e.id}">✏️</button>
+                <button class="btn btn-sm btn-danger" data-del="${e.id}">🗑️</button>` : '<span class="muted">—</span>'}
+              </td>
+            </tr>`).join('') || `<tr><td colspan="8" class="empty">${t('No data')}</td></tr>`}
+        </tbody>
+        ${rows.length ? `<tfoot><tr><td colspan="6" class="right"><strong>${t('Total')} (${rows.length})</strong></td><td class="num mono"><strong>€ ${fmt(data.totals.gross)}</strong></td><td></td></tr></tfoot>` : ''}
+      </table>
+    </div>`;
+
+  const reload = () => { expFrom = $('#exp-from').value; expTo = $('#exp-to').value; renderExpenses(); };
+  $('#exp-from').onchange = reload;
+  $('#exp-to').onchange = reload;
+  $('#exp-year').onclick = () => { expFrom = today().slice(0, 4) + '-01-01'; expTo = today(); renderExpenses(); };
+  $('#exp-all').onclick = () => { expFrom = ''; expTo = ''; renderExpenses(); };
+  $('#exp-cat').onchange = (e) => { expCatFilter = e.target.value; renderExpenses(); };
+  $('#exp-export').onclick = () => exportCSV(
+    `expenses_${expFrom || 'all'}_${expTo || 'all'}.csv`,
+    ['#', 'Date', 'Category', 'Description', 'Supplier', 'VAT %', 'VAT (€)', 'Gross (€)'],
+    rows.map((e, idx) => [idx + 1, e.expense_date, e.category, e.description || '', e.supplier || '', e.vat_rate, e.vat_amount, e.amount_gross])
+  );
+  $$('[data-edit]').forEach((b) => b.onclick = () => editExpense(b.dataset.edit));
+  $$('[data-del]').forEach((b) => b.onclick = async () => {
+    if (!confirm('Delete this expense?')) return;
+    await del('/expenses/' + b.dataset.del); toast('Deleted', 'success'); renderExpenses();
+  });
+}
+
+async function editExpense(id) {
+  await loadExpenseCategories();
+  const ex = id ? await get('/expenses/' + id) : { vat_rate: 0 };
+  const f = (k) => esc(ex[k] ?? '');
+  const hasCurrent = ex.category && !expenseCategories.some((c) => c.name === ex.category);
+  const catOptions = [
+    ...expenseCategories.map((c) => `<option value="${esc(c.name)}" ${ex.category === c.name ? 'selected' : ''}>${esc(c.name)}</option>`),
+    hasCurrent ? `<option value="${esc(ex.category)}" selected>${esc(ex.category)}</option>` : '',
+  ].join('');
+  openModal({
+    title: id ? t('Edit Expense') : t('New Expense'),
+    bodyHTML: `
+      <div class="form-row">
+        <div class="field"><label>${t('Expense Date')} *</label><input id="x-date" type="date" value="${f('expense_date') || today()}"></div>
+        <div class="field"><label>${t('Category')}</label>
+          <select id="x-cat">${catOptions}</select>
+        </div>
+      </div>
+      <div class="field"><label>${t('Description')}</label><input id="x-desc" value="${f('description')}"></div>
+      <div class="form-row">
+        <div class="field"><label>${t('Supplier')}</label><input id="x-supplier" value="${f('supplier')}"></div>
+        <div class="field"><label>${t('Document Ref')}</label><input id="x-doc" value="${f('document_ref')}"></div>
+      </div>
+      <div class="form-row-3">
+        <div class="field"><label>${t('Gross (€)')} *</label><input id="x-gross" type="number" step="0.01" value="${f('amount_gross')}"></div>
+        <div class="field"><label>${t('VAT %')}</label><input id="x-vat" type="number" step="0.01" value="${f('vat_rate')}"></div>
+        <div class="field"><label>${t('Method')}</label>
+          <select id="x-method">${PAY_METHODS.map((m) => `<option value="${m}" ${ex.payment_method === m ? 'selected' : ''}>${methodIcon[m]} ${methodLabel(m)}</option>`).join('')}</select>
+        </div>
+      </div>
+      <div class="field"><label>${t('Notes')}</label><textarea id="x-notes">${f('notes')}</textarea></div>`,
+    footHTML: `<button class="btn" id="x-cancel">${t('Cancel')}</button><button class="btn btn-primary" id="x-save">${t('Save Expense')}</button>`,
+  });
+  $('#x-cancel').onclick = closeModal;
+  $('#x-save').onclick = async () => {
+    const amount = $('#x-gross').value;
+    if (!amount || Number(amount) <= 0) return toast('A positive amount is required', 'error');
+    const payload = {
+      expense_date: $('#x-date').value, category: $('#x-cat').value,
+      description: $('#x-desc').value, supplier: $('#x-supplier').value,
+      amount_gross: amount, vat_rate: $('#x-vat').value,
+      payment_method: $('#x-method').value, document_ref: $('#x-doc').value, notes: $('#x-notes').value,
+    };
+    try {
+      await (id ? put('/expenses/' + id, payload) : post('/expenses', payload));
+      toast(t('Save'), 'success'); closeModal(); renderExpenses();
+    } catch (e) { toast(e.message, 'error'); }
+  };
+}
+
+async function manageExpenseCategories() {
+  await loadExpenseCategories();
+  openModal({
+    title: t('Categories'),
+    bodyHTML: `
+      <div style="display:flex;gap:8px">
+        <input id="cat-new" placeholder="${t('New category name')}" style="flex:1">
+        <button class="btn btn-primary" id="cat-add">${t('Add')}</button>
+      </div>
+      <table class="grid-table" style="margin-top:14px">
+        <thead><tr><th>${t('Category')}</th><th style="width:120px">${t('Actions')}</th></tr></thead>
+        <tbody>
+          ${expenseCategories.map((c) => `<tr>
+            <td><input class="cat-name" data-id="${c.id}" value="${esc(c.name)}" style="width:100%"></td>
+            <td class="num" style="white-space:nowrap">
+              <button class="btn btn-sm" data-ren="${c.id}">💾</button>
+              <button class="btn btn-sm btn-danger" data-delcat="${c.id}">🗑️</button>
+            </td>
+          </tr>`).join('') || `<tr><td colspan="2" class="muted">${t('No data')}</td></tr>`}
+        </tbody>
+      </table>`,
+    footHTML: `<button class="btn" id="cat-close">${t('Close')}</button>`,
+  });
+  $('#cat-close').onclick = closeModal;
+  $('#cat-add').onclick = async () => {
+    const name = $('#cat-new').value.trim();
+    if (!name) return toast('Category name is required', 'error');
+    try { await post('/expense-categories', { name }); toast('Category added', 'success'); manageExpenseCategories(); }
+    catch (e) { toast(e.message, 'error'); }
+  };
+  $$('[data-ren]').forEach((b) => b.onclick = async () => {
+    const name = $('.cat-name', b.closest('tr')).value.trim();
+    if (!name) return toast('Category name is required', 'error');
+    try { await put('/expense-categories/' + b.dataset.ren, { name }); toast('Renamed', 'success'); manageExpenseCategories(); }
+    catch (e) { toast(e.message, 'error'); }
+  });
+  $$('[data-delcat]').forEach((b) => b.onclick = async () => {
+    if (!confirm('Delete this category?')) return;
+    try { await del('/expense-categories/' + b.dataset.delcat); toast('Deleted', 'success'); manageExpenseCategories(); }
+    catch (e) { toast(e.message, 'error'); }
+  });
 }
 
 /* ============================================================
@@ -929,8 +1116,8 @@ route('reports', async () => {
   if (repFrom) qs.set('from', repFrom);
   if (repTo) qs.set('to', repTo);
   const q = qs.toString() ? '?' + qs.toString() : '';
-  const [aging, byItem, monthly] = await Promise.all([
-    get('/reports/aging' + q), get('/reports/by-item'), get('/reports/monthly' + q),
+  const [aging, byItem, monthly, euer] = await Promise.all([
+    get('/reports/aging' + q), get('/reports/by-item'), get('/reports/monthly' + q), get('/reports/euer-summary' + q),
   ]);
   const b = aging.buckets;
   const mt = monthly.totals;
@@ -943,7 +1130,13 @@ route('reports', async () => {
       <button class="btn btn-sm" id="rep-year">${t('This Year')}</button>
       <button class="btn btn-sm" id="rep-all">${t('All')}</button>
       <span class="spacer"></span>
-      <button class="btn btn-sm" id="rep-tax-export">📑 ${t('Tax Export (EÜR)')}</button>
+      <button class="btn btn-sm" id="rep-tax-export">📑 ${t('EÜR Export')}</button>
+    </div>
+
+    <div class="grid-3">
+      <div class="card"><h3 class="card-title">${t('Income (EUR)')}</h3><div class="stat big">€ ${fmt(euer.income)}</div></div>
+      <div class="card"><h3 class="card-title">${t('Expenses (EUR)')}</h3><div class="stat big">€ ${fmt(euer.expenses)}</div><div class="muted" style="font-size:12px">${t('Gateway Fees')}: € ${fmt(euer.gatewayFees)}</div></div>
+      <div class="card"><h3 class="card-title">${t('Net Profit')}</h3><div class="stat big ${euer.profit >= 0 ? 'green' : 'red'}">€ ${fmt(euer.profit)}</div></div>
     </div>
 
     <div class="grid-2">
@@ -1024,7 +1217,7 @@ route('reports', async () => {
     const eq = new URLSearchParams();
     if (repFrom) eq.set('from', repFrom);
     if (repTo) eq.set('to', repTo);
-    window.open('/api/reports/tax-export' + (eq.toString() ? '?' + eq.toString() : ''), '_blank');
+    window.open('/api/reports/euer-export' + (eq.toString() ? '?' + eq.toString() : ''), '_blank');
   };
   $('#rep-export-month').onclick = () => exportCSV(
     `monthly_summary_${repFrom || 'all'}_${repTo || 'all'}.csv`,

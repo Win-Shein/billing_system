@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db/database');
+const { round2, deductibleExpense } = require('../lib/euerCategories');
 
 const router = express.Router();
 
@@ -146,6 +147,119 @@ router.get('/tax-export', (req, res) => {
   const csv = '\uFEFF' + lines.join('\r\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="tax-export_${from}_${to}.csv"`);
+  res.send(csv);
+});
+
+// JSON summary of the EÜR position (income, expenses, profit) for the UI.
+router.get('/euer-summary', (req, res) => {
+  const org = req.orgId;
+  const from = req.query.from || '1970-01-01';
+  const to = req.query.to || '2999-12-31';
+
+  const settings = db.prepare('SELECT is_kleinunternehmer FROM settings WHERE org_id = ?').get(org);
+  const klein = !!settings?.is_kleinunternehmer;
+
+  const incomeRow = db
+    .prepare(
+      `SELECT COALESCE(SUM(settled_amount_eur),0) AS income, COALESCE(SUM(gateway_fee_eur),0) AS fees
+         FROM payment_settlements WHERE org_id = ? AND settlement_date BETWEEN ? AND ?`
+    )
+    .get(org, from, to);
+
+  const expRows = db
+    .prepare('SELECT amount_gross, vat_amount FROM expenses WHERE org_id = ? AND expense_date BETWEEN ? AND ?')
+    .all(org, from, to);
+
+  let expenses = 0;
+  for (const r of expRows) expenses += deductibleExpense(r.amount_gross, r.vat_amount, klein);
+  expenses = round2(expenses + (incomeRow.fees || 0));
+
+  const income = round2(incomeRow.income || 0);
+  const profit = round2(income - expenses);
+
+  res.json({ from, to, income, gatewayFees: round2(incomeRow.fees || 0), expenses, profit, klein });
+});
+
+// Full EÜR export: income (Einnahmen) + expenses (Betriebsausgaben) + profit.
+// Income comes from payment_settlements (Zuflussprinzip); gateway fees are
+// treated as a deductible expense. Expenses come from the `expenses` table.
+// Deductible expense basis depends on the VAT regime: a Kleinunternehmer
+// (§ 19 UStG) cannot reclaim Vorsteuer, so the full gross is deductible;
+// otherwise only the net (gross − Vorsteuer) is a Betriebsausgabe.
+router.get('/euer-export', (req, res) => {
+  const org = req.orgId;
+  const from = req.query.from || '1970-01-01';
+  const to = req.query.to || '2999-12-31';
+
+  const settings = db.prepare('SELECT is_kleinunternehmer FROM settings WHERE org_id = ?').get(org);
+  const klein = !!settings?.is_kleinunternehmer;
+
+  const income = db
+    .prepare(
+      `SELECT s.settlement_date AS d, i.invoice_no AS ref, c.name AS party,
+              s.settled_amount_eur AS amount, s.gateway_fee_eur AS fee
+         FROM payment_settlements s
+         JOIN invoices i ON i.id = s.invoice_id
+         JOIN customers c ON c.id = i.customer_id
+        WHERE s.org_id = ? AND s.settlement_date BETWEEN ? AND ?
+        ORDER BY s.settlement_date, s.id`
+    )
+    .all(org, from, to);
+
+  const expenses = db
+    .prepare(
+      `SELECT expense_date AS d, document_ref AS ref, supplier AS party, description,
+              amount_gross, vat_amount, category
+         FROM expenses
+        WHERE org_id = ? AND expense_date BETWEEN ? AND ?
+        ORDER BY expense_date, id`
+    )
+    .all(org, from, to);
+
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [];
+
+  lines.push(['EÜR — Einnahmenüberschussrechnung', '', '', ''].map(cell).join(','));
+  lines.push([`Zeitraum: ${from} – ${to}`, '', '', ''].map(cell).join(','));
+  lines.push(['', '', '', ''].map(cell).join(','));
+
+  // Income section
+  lines.push(['EINNAHMEN (income)', '', '', ''].map(cell).join(','));
+  lines.push(['Date', 'Invoice', 'Client', 'Income (EUR)'].map(cell).join(','));
+  let incomeTotal = 0, feeTotal = 0;
+  for (const r of income) {
+    incomeTotal += r.amount;
+    feeTotal += r.fee;
+    lines.push([r.d, r.ref, r.party, r.amount.toFixed(2)].map(cell).join(','));
+  }
+  lines.push(['', '', 'Subtotal income', incomeTotal.toFixed(2)].map(cell).join(','));
+
+  // Expenses section
+  lines.push(['', '', '', ''].map(cell).join(','));
+  lines.push(['BETRIEBSAUSGABEN (expenses)', '', '', ''].map(cell).join(','));
+  lines.push(['Date', 'Category', 'Supplier / Description', 'Expense (EUR)'].map(cell).join(','));
+  let expenseTotal = 0;
+  for (const r of expenses) {
+    const deductible = deductibleExpense(r.amount_gross, r.vat_amount, klein);
+    expenseTotal += deductible;
+    const desc = [r.party, r.description].filter(Boolean).join(' — ');
+    lines.push([r.d, r.category, desc, deductible.toFixed(2)].map(cell).join(','));
+  }
+  if (feeTotal > 0) {
+    expenseTotal += feeTotal;
+    lines.push(['', 'fees', 'Payment gateway fees', feeTotal.toFixed(2)].map(cell).join(','));
+  }
+  lines.push(['', '', 'Subtotal expenses', expenseTotal.toFixed(2)].map(cell).join(','));
+
+  // Profit
+  const profit = round2(incomeTotal - expenseTotal);
+  lines.push(['', '', '', ''].map(cell).join(','));
+  lines.push(['GEWINN (profit)', '', '', profit.toFixed(2)].map(cell).join(','));
+  lines.push([klein ? 'Basis: Kleinunternehmer (§ 19 UStG) — gross expenses deductible' : 'Basis: Vorsteuerabzug — net expenses deductible', '', '', ''].map(cell).join(','));
+
+  const csv = '\uFEFF' + lines.join('\r\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="euer-export_${from}_${to}.csv"`);
   res.send(csv);
 });
 

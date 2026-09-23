@@ -110,6 +110,13 @@ body {
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 900px){ .grid-2 { grid-template-columns: 1fr; } }
 
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 18px; }
+@media (max-width: 900px){ .grid-3 { grid-template-columns: 1fr; } }
+
+.stat.big { font-size: 26px; font-weight: 700; }
+.stat.green { color: var(--green); }
+.stat.red { color: var(--red); }
+
 .card-title { font-weight: 600; margin: 0 0 14px; font-size: 15px; }
 
 /* ---------- Tables ---------- */

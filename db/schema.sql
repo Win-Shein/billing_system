@@ -192,3 +192,39 @@ CREATE TABLE IF NOT EXISTS invoice_sequences (
   next   INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (org_id, year)
 );
+
+-- ---------- Expenses (German EÜR — Betriebsausgaben) ----------
+-- Business costs recorded in EUR for the Einnahmenüberschussrechnung.
+-- `amount_gross` is what actually left the account (Abfluss), `vat_amount`
+-- the Vorsteuer portion. Categories mirror the standard Kontenrahmen
+-- (see lib/euerCategories.js).
+CREATE TABLE IF NOT EXISTS expenses (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id         INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  expense_date   TEXT    NOT NULL,                -- Abflussdatum (date paid)
+  category       TEXT    NOT NULL,                -- EÜR / Kontenrahmen category
+  description    TEXT,
+  supplier       TEXT,                            -- Lieferant
+  amount_gross   REAL    NOT NULL DEFAULT 0,       -- Brutto (what left the account)
+  vat_rate       REAL    NOT NULL DEFAULT 0,       -- VAT %
+  vat_amount     REAL    NOT NULL DEFAULT 0,       -- Vorsteuer portion
+  payment_method TEXT,
+  document_ref   TEXT,                            -- Belegnummer / receipt reference (GoBD)
+  notes          TEXT,
+  created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+  updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_expenses_org ON expenses(org_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);
+
+-- ---------- Expense categories (user-editable EÜR) ----------
+-- Seeded with the default Kontenrahmen-style list (see lib/euerCategories.js)
+-- on first use; the user can then add, rename or delete their own categories.
+CREATE TABLE IF NOT EXISTS expense_categories (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id     INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name       TEXT    NOT NULL,
+  created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (org_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_expense_categories_org ON expense_categories(org_id);

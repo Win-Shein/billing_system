@@ -100,6 +100,8 @@ app.use("/api/items", require("./routes/items"));
 app.use("/api/invoices", require("./routes/invoices"));
 app.use("/api/payments", require("./routes/payments"));
 app.use("/api/settlements", require("./routes/settlements"));
+app.use("/api/expenses", require("./routes/expenses"));
+app.use("/api/expense-categories", require("./routes/expenseCategories"));
 app.use("/api/reports", require("./routes/reports"));
 app.use("/api/settings", require("./routes/settings"));
 
