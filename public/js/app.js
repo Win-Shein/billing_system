@@ -117,6 +117,7 @@ const MM = {
   Add: 'ထည့်မည်', 'Receipt (Beleg)': 'Beleg / ပြေစာ', View: 'ကြည့်မည်', Remove: 'ဖယ်ရှား',
   'Full Data Export': 'Data အပြည့် ထုတ်မည်',
   'Exchange Rate': 'ငွေလဲနှုန်း', Currency: 'ငွေကြေး', 'Computed EUR': 'EUR တွက်ချက်မှု',
+  'Audit Log': 'မှတ်တမ်း (Audit)', Entity: 'အမျိုးအစား', Action: 'လုပ်ဆောင်ချက်', User: 'အသုံးပြုသူ', Details: 'အသေးစိတ်',
   // Settings
   'Company Logo': 'ကုမ္ပဏီ Logo', 'Company Details': 'ကုမ္ပဏီ အချက်အလက်', 'Billing Preferences': 'ငွေတောင်းခံမှု ဆက်တင်',
   Language: 'ဘာသာစကား', 'Save Settings': 'ဆက်တင် သိမ်းမည်', 'Remove logo': 'Logo ဖယ်ရှား',
@@ -1332,6 +1333,35 @@ route('reports', async () => {
 });
 
 /* ============================================================
+   Audit Log (GoBD Nachvollziehbarkeit)
+   ============================================================ */
+route('audit', async () => {
+  const rows = await get('/audit');
+  const actionBadge = (a) => {
+    const map = { create: 'green', update: 'amber', delete: 'red', issue: 'accent', cancel: 'red' };
+    return `<span class="badge ${map[a] || 'sent'}">${esc(a)}</span>`;
+  };
+  $('#view').innerHTML = `
+    <div class="table-wrap">
+      <table class="grid-table">
+        <thead><tr><th class="num" style="width:44px">${t('#')}</th><th>${t('Date')}</th><th>${t('Entity')}</th><th>${t('Action')}</th><th>ID</th><th>${t('User')}</th><th>${t('Details')}</th></tr></thead>
+        <tbody>
+          ${rows.map((a, idx) => `
+            <tr>
+              <td class="num muted">${idx + 1}</td>
+              <td>${esc(a.created_at)}</td>
+              <td>${esc(a.entity)}</td>
+              <td>${actionBadge(a.action)}</td>
+              <td class="num">${a.entity_id ?? '—'}</td>
+              <td>${esc(a.user_email || '')}</td>
+              <td class="muted" style="font-size:12px">${esc(a.details || '')}</td>
+            </tr>`).join('') || `<tr><td colspan="7" class="empty">${t('No data')}</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+});
+
+/* ============================================================
    Settings
    ============================================================ */
 route('settings', async () => {
@@ -1370,7 +1400,11 @@ route('settings', async () => {
       <h3 class="card-title">${t('Company Details')}</h3>
       <div class="form-row">
         <div class="field"><label>Company Name</label><input id="s-name" value="${f('company_name')}"></div>
-        <div class="field"><label>Tax Number</label><input id="s-tax" value="${f('tax_number')}"></div>
+        <div class="field"><label>Steuernummer</label><input id="s-steuer" value="${f('steuernummer')}" placeholder="12/345/67890"></div>
+      </div>
+      <div class="form-row">
+        <div class="field"><label>USt-IdNr</label><input id="s-ust" value="${f('ust_id')}" placeholder="DE123456789"></div>
+        <div class="field"><label>Tax Number (legacy)</label><input id="s-tax" value="${f('tax_number')}"></div>
       </div>
       <div class="form-row">
         <div class="field"><label>Email</label><input id="s-email" value="${f('email')}"></div>
@@ -1465,7 +1499,9 @@ route('settings', async () => {
 
   $('#s-save').onclick = async () => {
     const payload = {
-      company_name: $('#s-name').value, tax_number: $('#s-tax').value, email: $('#s-email').value,
+      company_name: $('#s-name').value, tax_number: $('#s-tax').value,
+      steuernummer: $('#s-steuer').value, ust_id: $('#s-ust').value,
+      email: $('#s-email').value,
       phone: $('#s-phone').value, address: $('#s-address').value, city: $('#s-city').value,
       country: $('#s-country').value, currency: $('#s-cur').value, currency_symbol: $('#s-sym').value,
       default_tax: $('#s-dtax').value, invoice_prefix: $('#s-prefix').value,

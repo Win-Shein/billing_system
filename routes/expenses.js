@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db/database');
 const { round2, expenseVatAmount } = require('../lib/euerCategories');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -127,6 +128,7 @@ router.post('/', (req, res) => {
       notes: b.notes || null,
     });
 
+  auditReq(req, 'create', 'expenses', info.lastInsertRowid);
   res.status(201).json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(info.lastInsertRowid));
 });
 
@@ -180,6 +182,7 @@ router.put('/:id', (req, res) => {
     notes: b.notes ?? existing.notes,
   });
 
+  auditReq(req, 'update', 'expenses', req.params.id);
   res.json(db.prepare('SELECT * FROM expenses WHERE id = ?').get(req.params.id));
 });
 
@@ -187,6 +190,7 @@ router.delete('/:id', (req, res) => {
   const existing = db.prepare('SELECT id FROM expenses WHERE id = ? AND org_id = ?').get(req.params.id, req.orgId);
   if (!existing) return res.status(404).json({ error: 'Expense not found' });
   db.prepare('DELETE FROM expenses WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
+  auditReq(req, 'delete', 'expenses', req.params.id);
   res.json({ ok: true });
 });
 

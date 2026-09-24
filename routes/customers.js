@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db/database');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -55,6 +56,7 @@ router.post('/', (req, res) => {
       tax_number: b.tax_number || null,
       notes: b.notes || null,
     });
+  auditReq(req, 'create', 'customers', info.lastInsertRowid, { name: b.name.trim() });
   res.status(201).json(db.prepare('SELECT * FROM customers WHERE id = ?').get(info.lastInsertRowid));
 });
 
@@ -81,6 +83,7 @@ router.put('/:id', (req, res) => {
     notes: b.notes ?? existing.notes,
     is_active: b.is_active ?? existing.is_active,
   });
+  auditReq(req, 'update', 'customers', req.params.id);
   res.json(db.prepare('SELECT * FROM customers WHERE id = ?').get(req.params.id));
 });
 
@@ -92,6 +95,7 @@ router.delete('/:id', (req, res) => {
     return res.status(409).json({ error: 'Cannot delete: customer has invoices. Deactivate instead.' });
   }
   db.prepare('DELETE FROM customers WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
+  auditReq(req, 'delete', 'customers', req.params.id);
   res.json({ ok: true });
 });
 

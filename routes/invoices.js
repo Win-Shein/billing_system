@@ -6,6 +6,7 @@ const {
   recalcInvoice, replaceLineItems, draftInvoiceNo, issueInvoice, cancelInvoice,
 } = require('../lib/invoiceService');
 const { buildInvoicePdf } = require('../lib/pdf');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -101,6 +102,7 @@ router.post('/', (req, res) => {
   });
 
   const id = create();
+  auditReq(req, 'create', 'invoices', id);
   res.status(201).json(loadFull(id, req.orgId));
 });
 
@@ -147,6 +149,7 @@ router.put('/:id', (req, res) => {
   });
 
   update();
+  auditReq(req, 'update', 'invoices', req.params.id);
   res.json(loadFull(req.params.id, req.orgId));
 });
 
@@ -164,6 +167,7 @@ router.patch('/:id/status', (req, res) => {
     req.body.status, req.params.id, req.orgId
   );
   recalcInvoice(req.params.id);
+  auditReq(req, 'update', 'invoices', req.params.id, { status: req.body.status });
   res.json(loadFull(req.params.id, req.orgId));
 });
 
@@ -174,6 +178,7 @@ router.post('/:id/issue', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Invoice not found' });
   try {
     issueInvoice(Number(req.params.id), req.orgId);
+    auditReq(req, 'issue', 'invoices', req.params.id);
     res.json(loadFull(req.params.id, req.orgId));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -187,6 +192,7 @@ router.post('/:id/cancel', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Invoice not found' });
   try {
     const result = cancelInvoice(Number(req.params.id), req.orgId);
+    auditReq(req, 'cancel', 'invoices', req.params.id, { storno_id: result.storno.id, storno_no: result.storno.invoice_no });
     res.json({
       original: loadFull(req.params.id, req.orgId),
       storno: loadFull(result.storno.id, req.orgId),
@@ -205,6 +211,7 @@ router.delete('/:id', (req, res) => {
     return res.status(409).json({ error: 'Cannot delete an issued invoice. Use Cancel to create a Stornorechnung instead.' });
   }
   db.prepare('DELETE FROM invoices WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
+  auditReq(req, 'delete', 'invoices', req.params.id);
   res.json({ ok: true });
 });
 

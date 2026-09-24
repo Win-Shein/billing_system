@@ -110,6 +110,27 @@ function migrate(raw) {
     );
   `);
   raw.exec('CREATE INDEX IF NOT EXISTS idx_expense_categories_org ON expense_categories(org_id);');
+
+  /* ---- Steuernummer / USt-IdNr split ------------------------------------- */
+  addColumn(raw, 'settings', 'steuernummer', 'TEXT');
+  addColumn(raw, 'settings', 'ust_id', 'TEXT');
+  addColumn(raw, 'invoices', 'issuer_ust_id', 'TEXT');
+
+  /* ---- audit log (GoBD Nachvollziehbarkeit) ------------------------------ */
+  raw.exec(`
+    CREATE TABLE IF NOT EXISTS audit_log (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      org_id     INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_email TEXT,
+      action     TEXT    NOT NULL,
+      entity     TEXT    NOT NULL,
+      entity_id  INTEGER,
+      details    TEXT,
+      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_org ON audit_log(org_id);');
+  raw.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(org_id, entity, entity_id);');
 }
 
 module.exports = { migrate, columnExists, addColumn };

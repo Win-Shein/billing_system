@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db/database');
 const { recalcInvoice } = require('../lib/invoiceService');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -50,6 +51,7 @@ router.post('/', (req, res) => {
     });
 
   recalcInvoice(b.invoice_id);
+  auditReq(req, 'create', 'payments', info.lastInsertRowid, { invoice_id: b.invoice_id, amount });
   res.status(201).json({
     payment: db.prepare('SELECT * FROM payments WHERE id = ?').get(info.lastInsertRowid),
     invoice: db.prepare('SELECT * FROM invoices WHERE id = ?').get(b.invoice_id),
@@ -61,6 +63,7 @@ router.delete('/:id', (req, res) => {
   if (!pay) return res.status(404).json({ error: 'Payment not found' });
   db.prepare('DELETE FROM payments WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
   recalcInvoice(pay.invoice_id);
+  auditReq(req, 'delete', 'payments', req.params.id, { invoice_id: pay.invoice_id });
   res.json({ ok: true });
 });
 

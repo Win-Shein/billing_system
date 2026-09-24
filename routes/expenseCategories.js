@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db/database');
 const { DEFAULT_EXPENSE_CATEGORIES } = require('../lib/euerCategories');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.post('/', (req, res) => {
     .get(req.orgId, name);
   if (dup) return res.status(409).json({ error: 'Category already exists' });
   const info = db.prepare('INSERT INTO expense_categories (org_id, name) VALUES (?, ?)').run(req.orgId, name);
+  auditReq(req, 'create', 'expense_categories', info.lastInsertRowid, { name });
   res.status(201).json(db.prepare('SELECT * FROM expense_categories WHERE id = ?').get(info.lastInsertRowid));
 });
 
@@ -49,6 +51,7 @@ router.put('/:id', (req, res) => {
     db.prepare('UPDATE expenses SET category = ? WHERE org_id = ? AND category = ?').run(name, req.orgId, existing.name);
   })();
 
+  auditReq(req, 'update', 'expense_categories', req.params.id, { from: existing.name, to: name });
   res.json(db.prepare('SELECT * FROM expense_categories WHERE id = ?').get(req.params.id));
 });
 
@@ -60,6 +63,7 @@ router.delete('/:id', (req, res) => {
     return res.status(409).json({ error: 'Cannot delete: this category is used by expenses' });
   }
   db.prepare('DELETE FROM expense_categories WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
+  auditReq(req, 'delete', 'expense_categories', req.params.id, { name: existing.name });
   res.json({ ok: true });
 });
 

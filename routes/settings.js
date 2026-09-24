@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db/database');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -15,8 +16,8 @@ router.put('/', (req, res) => {
   db.prepare(
     `UPDATE settings SET
        company_name=@company_name, email=@email, phone=@phone, address=@address,
-       city=@city, country=@country, tax_number=@tax_number, currency=@currency,
-       currency_symbol=@currency_symbol, default_tax=@default_tax, invoice_prefix=@invoice_prefix,
+       city=@city, country=@country, tax_number=@tax_number, steuernummer=@steuernummer, ust_id=@ust_id,
+       currency=@currency, currency_symbol=@currency_symbol, default_tax=@default_tax, invoice_prefix=@invoice_prefix,
        invoice_next=@invoice_next, language=@language, logo_url=@logo_url, notes=@notes,
        is_kleinunternehmer=@is_kleinunternehmer, bank_name=@bank_name, bank_iban=@bank_iban,
        bank_bic=@bank_bic, bank_account_holder=@bank_account_holder,
@@ -31,6 +32,8 @@ router.put('/', (req, res) => {
     city: b.city ?? cur.city,
     country: b.country ?? cur.country,
     tax_number: b.tax_number ?? cur.tax_number,
+    steuernummer: b.steuernummer ?? cur.steuernummer,
+    ust_id: b.ust_id ?? cur.ust_id,
     currency: b.currency ?? cur.currency,
     currency_symbol: b.currency_symbol ?? cur.currency_symbol,
     default_tax: b.default_tax != null ? Number(b.default_tax) : cur.default_tax,
@@ -45,6 +48,7 @@ router.put('/', (req, res) => {
     bank_bic: b.bank_bic ?? cur.bank_bic,
     bank_account_holder: b.bank_account_holder ?? cur.bank_account_holder,
   });
+  auditReq(req, 'update', 'settings', cur.org_id);
   res.json(db.prepare('SELECT * FROM settings WHERE org_id = ?').get(req.orgId));
 });
 

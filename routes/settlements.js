@@ -10,6 +10,7 @@
 const express = require('express');
 const db = require('../db/database');
 const { round2 } = require('../lib/euerCategories');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -83,6 +84,7 @@ router.post('/', (req, res) => {
       transaction_ref: b.transaction_ref || null,
     });
 
+  auditReq(req, 'create', 'settlements', info.lastInsertRowid, { invoice_id: b.invoice_id, settled_amount_eur: settledEur });
   res.status(201).json(db.prepare('SELECT * FROM payment_settlements WHERE id = ?').get(info.lastInsertRowid));
 });
 
@@ -90,6 +92,7 @@ router.delete('/:id', (req, res) => {
   const row = db.prepare('SELECT id FROM payment_settlements WHERE id = ? AND org_id = ?').get(req.params.id, req.orgId);
   if (!row) return res.status(404).json({ error: 'Settlement not found' });
   db.prepare('DELETE FROM payment_settlements WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
+  auditReq(req, 'delete', 'settlements', req.params.id);
   res.json({ ok: true });
 });
 

@@ -2,6 +2,7 @@
 
 const express = require('express');
 const db = require('../db/database');
+const { auditReq } = require('../lib/audit');
 
 const router = express.Router();
 
@@ -46,6 +47,7 @@ router.post('/', (req, res) => {
       tax_rate: Number(b.tax_rate) || 0,
       stock: b.stock === '' || b.stock == null ? null : Number(b.stock),
     });
+  auditReq(req, 'create', 'items', info.lastInsertRowid, { name: b.name.trim() });
   res.status(201).json(db.prepare('SELECT * FROM items WHERE id = ?').get(info.lastInsertRowid));
 });
 
@@ -72,11 +74,13 @@ router.put('/:id', (req, res) => {
     stock: b.stock === '' ? null : b.stock != null ? Number(b.stock) : existing.stock,
     is_active: b.is_active ?? existing.is_active,
   });
+  auditReq(req, 'update', 'items', req.params.id);
   res.json(db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.id));
 });
 
 router.delete('/:id', (req, res) => {
   db.prepare('DELETE FROM items WHERE id = ? AND org_id = ?').run(req.params.id, req.orgId);
+  auditReq(req, 'delete', 'items', req.params.id);
   res.json({ ok: true });
 });
 

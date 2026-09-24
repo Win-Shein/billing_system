@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS settings (
   city            TEXT,
   country         TEXT,
   tax_number      TEXT,
+  steuernummer    TEXT,                             -- German Steuernummer (e.g. 12/345/67890)
+  ust_id          TEXT,                             -- USt-IdNr (e.g. DE123456789)
   currency        TEXT    NOT NULL DEFAULT 'EUR',
   currency_symbol TEXT    NOT NULL DEFAULT '€',
   default_tax     REAL    NOT NULL DEFAULT 0,
@@ -115,7 +117,8 @@ CREATE TABLE IF NOT EXISTS invoices (
   notes          TEXT,
   terms          TEXT,
   -- German tax compliance (Finanzamt / GoBD / UStG / cross-border to Myanmar)
-  issuer_tax_number     TEXT,                          -- Steuernummer / USt-IdNr snapshot at issue time
+  issuer_tax_number     TEXT,                          -- Steuernummer snapshot at issue time
+  issuer_ust_id         TEXT,                          -- USt-IdNr snapshot at issue time
   client_country        TEXT    NOT NULL DEFAULT 'Myanmar',
   service_period_start  TEXT,                          -- Leistungszeitraum start
   service_period_end    TEXT,                          -- Leistungszeitraum end
@@ -234,3 +237,19 @@ CREATE TABLE IF NOT EXISTS expense_categories (
   UNIQUE (org_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_expense_categories_org ON expense_categories(org_id);
+
+-- ---------- Audit log (GoBD Nachvollziehbarkeit / traceability) ----------
+-- Records who changed what and when across all business entities, so the
+-- history of the books can be reconstructed for a tax audit.
+CREATE TABLE IF NOT EXISTS audit_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id     INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  user_email TEXT,
+  action     TEXT    NOT NULL,              -- create / update / delete / issue / cancel
+  entity     TEXT    NOT NULL,              -- invoices / expenses / customers / ...
+  entity_id  INTEGER,
+  details    TEXT,                          -- JSON summary of the change
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_log_org ON audit_log(org_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(org_id, entity, entity_id);
