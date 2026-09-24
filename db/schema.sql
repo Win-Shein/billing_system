@@ -210,6 +210,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   vat_amount     REAL    NOT NULL DEFAULT 0,       -- Vorsteuer portion
   payment_method TEXT,
   document_ref   TEXT,                            -- Belegnummer / receipt reference (GoBD)
+  receipt_name   TEXT,                            -- original receipt filename (Beleg)
+  receipt_data   TEXT,                            -- receipt as a data URI (image/PDF)
   notes          TEXT,
   created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at     TEXT    NOT NULL DEFAULT (datetime('now'))

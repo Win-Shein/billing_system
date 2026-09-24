@@ -89,6 +89,10 @@ function migrate(raw) {
   raw.exec('CREATE INDEX IF NOT EXISTS idx_expenses_org ON expenses(org_id);');
   raw.exec('CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(expense_date);');
 
+  /* ---- expenses: GoBD receipt (Beleg) attachment ------------------------- */
+  addColumn(raw, 'expenses', 'receipt_name', 'TEXT');
+  addColumn(raw, 'expenses', 'receipt_data', 'TEXT');
+
   /* ---- expense_categories: user-editable EÜR categories ------------------ */
   raw.exec(`
     CREATE TABLE IF NOT EXISTS expense_categories (

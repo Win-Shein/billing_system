@@ -113,7 +113,7 @@ const MM = {
   'EÜR Export': 'EÜR ထုတ်မည်', 'Income (EUR)': 'ဝင်ငွေ (EUR)', 'Expenses (EUR)': 'ကုန်ကျစရိတ် (EUR)',
   'Net Profit': 'အသားတင်အမြတ်', 'Expenses & Profit (EÜR)': 'ကုန်ကျစရိတ် & အမြတ် (EÜR)',
   'Gateway Fees': 'Gateway ကြေး', Categories: 'အမျိုးအစားများ', 'New category name': 'အမျိုးအစားအသစ် အမည်',
-  Add: 'ထည့်မည်',
+  Add: 'ထည့်မည်', 'Receipt (Beleg)': 'Beleg / ပြေစာ', View: 'ကြည့်မည်', Remove: 'ဖယ်ရှား',
   // Settings
   'Company Logo': 'ကုမ္ပဏီ Logo', 'Company Details': 'ကုမ္ပဏီ အချက်အလက်', 'Billing Preferences': 'ငွေတောင်းခံမှု ဆက်တင်',
   Language: 'ဘာသာစကား', 'Save Settings': 'ဆက်တင် သိမ်းမည်', 'Remove logo': 'Logo ဖယ်ရှား',
@@ -529,6 +529,7 @@ async function renderExpenses() {
               <td class="num">${e.vat_rate}%</td>
               <td class="num mono">€ ${fmt(e.amount_gross)}</td>
               <td class="num" style="white-space:nowrap">
+                ${e.has_receipt ? `<button class="btn btn-sm" data-receipt="${e.id}" title="${t('Receipt (Beleg)')}">📎</button>` : ''}
                 ${canWrite() ? `<button class="btn btn-sm" data-edit="${e.id}">✏️</button>
                 <button class="btn btn-sm btn-danger" data-del="${e.id}">🗑️</button>` : '<span class="muted">—</span>'}
               </td>
@@ -550,6 +551,11 @@ async function renderExpenses() {
     rows.map((e, idx) => [idx + 1, e.expense_date, e.category, e.description || '', e.supplier || '', e.vat_rate, e.vat_amount, e.amount_gross])
   );
   $$('[data-edit]').forEach((b) => b.onclick = () => editExpense(b.dataset.edit));
+  $$('[data-receipt]').forEach((b) => b.onclick = async () => {
+    const ex = await get('/expenses/' + b.dataset.receipt);
+    if (ex.receipt_data) window.open(ex.receipt_data, '_blank');
+    else toast('No receipt attached', 'error');
+  });
   $$('[data-del]').forEach((b) => b.onclick = async () => {
     if (!confirm('Delete this expense?')) return;
     await del('/expenses/' + b.dataset.del); toast('Deleted', 'success'); renderExpenses();
@@ -560,6 +566,8 @@ async function editExpense(id) {
   await loadExpenseCategories();
   const ex = id ? await get('/expenses/' + id) : { vat_rate: 0 };
   const f = (k) => esc(ex[k] ?? '');
+  let receiptData = ex.receipt_data || null;
+  let receiptName = ex.receipt_name || null;
   const hasCurrent = ex.category && !expenseCategories.some((c) => c.name === ex.category);
   const catOptions = [
     ...expenseCategories.map((c) => `<option value="${esc(c.name)}" ${ex.category === c.name ? 'selected' : ''}>${esc(c.name)}</option>`),
@@ -586,10 +594,41 @@ async function editExpense(id) {
           <select id="x-method">${PAY_METHODS.map((m) => `<option value="${m}" ${ex.payment_method === m ? 'selected' : ''}>${methodIcon[m]} ${methodLabel(m)}</option>`).join('')}</select>
         </div>
       </div>
+      <div class="field">
+        <label>${t('Receipt (Beleg)')}</label>
+        <div id="x-receipt-box" style="margin-bottom:6px"></div>
+        <input type="file" id="x-receipt-file" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf">
+        <div class="muted" style="font-size:12px;margin-top:4px">PNG / JPG / GIF / WebP / PDF · max ~1.5MB</div>
+      </div>
       <div class="field"><label>${t('Notes')}</label><textarea id="x-notes">${f('notes')}</textarea></div>`,
     footHTML: `<button class="btn" id="x-cancel">${t('Cancel')}</button><button class="btn btn-primary" id="x-save">${t('Save Expense')}</button>`,
   });
   $('#x-cancel').onclick = closeModal;
+
+  const renderReceipt = () => {
+    const box = $('#x-receipt-box');
+    if (receiptData) {
+      box.innerHTML = `<div style="display:flex;align-items:center;gap:8px">
+        <span class="muted">📎 ${esc(receiptName || 'receipt')}</span>
+        <button class="btn btn-sm" id="x-receipt-view">${t('View')}</button>
+        <button class="btn btn-sm btn-danger" id="x-receipt-remove">${t('Remove')}</button>
+      </div>`;
+      $('#x-receipt-view').onclick = () => window.open(receiptData, '_blank');
+      $('#x-receipt-remove').onclick = () => { receiptData = null; receiptName = null; $('#x-receipt-file').value = ''; renderReceipt(); };
+    } else {
+      box.innerHTML = '<span class="muted">No receipt</span>';
+    }
+  };
+  renderReceipt();
+  $('#x-receipt-file').onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 1.5 * 1024 * 1024) return toast('Receipt too large (max ~1.5MB)', 'error');
+    const reader = new FileReader();
+    reader.onload = () => { receiptData = reader.result; receiptName = file.name; renderReceipt(); };
+    reader.readAsDataURL(file);
+  };
+
   $('#x-save').onclick = async () => {
     const amount = $('#x-gross').value;
     if (!amount || Number(amount) <= 0) return toast('A positive amount is required', 'error');
@@ -598,6 +637,7 @@ async function editExpense(id) {
       description: $('#x-desc').value, supplier: $('#x-supplier').value,
       amount_gross: amount, vat_rate: $('#x-vat').value,
       payment_method: $('#x-method').value, document_ref: $('#x-doc').value, notes: $('#x-notes').value,
+      receipt_name: receiptName, receipt_data: receiptData,
     };
     try {
       await (id ? put('/expenses/' + id, payload) : post('/expenses', payload));
