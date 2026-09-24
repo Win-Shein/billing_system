@@ -37,6 +37,7 @@ router.get('/', (req, res) => {
     .prepare(
       `SELECT e.id, e.org_id, e.expense_date, e.category, e.description, e.supplier,
               e.amount_gross, e.vat_rate, e.vat_amount, e.payment_method, e.document_ref,
+              e.original_currency, e.original_amount, e.exchange_rate,
               e.receipt_name, (e.receipt_data IS NOT NULL) AS has_receipt,
               e.notes, e.created_at, e.updated_at
          FROM expenses e
@@ -95,11 +96,17 @@ router.post('/', (req, res) => {
     receiptData = b.receipt_data;
   }
 
+  const originalCurrency = String(b.original_currency || 'EUR').trim().toUpperCase() || 'EUR';
+  const originalAmount = b.original_amount != null && b.original_amount !== '' ? Number(b.original_amount) : null;
+  const exchangeRate = b.exchange_rate != null && b.exchange_rate !== '' ? Number(b.exchange_rate) : null;
+
   const info = db
     .prepare(
       `INSERT INTO expenses
-         (org_id, expense_date, category, description, supplier, amount_gross, vat_rate, vat_amount, payment_method, document_ref, receipt_name, receipt_data, notes)
-       VALUES (@org, @expense_date, @category, @description, @supplier, @amount_gross, @vat_rate, @vat_amount, @payment_method, @document_ref, @receipt_name, @receipt_data, @notes)`
+         (org_id, expense_date, category, description, supplier, amount_gross, vat_rate, vat_amount,
+          original_currency, original_amount, exchange_rate, payment_method, document_ref, receipt_name, receipt_data, notes)
+       VALUES (@org, @expense_date, @category, @description, @supplier, @amount_gross, @vat_rate, @vat_amount,
+          @original_currency, @original_amount, @exchange_rate, @payment_method, @document_ref, @receipt_name, @receipt_data, @notes)`
     )
     .run({
       org: req.orgId,
@@ -110,6 +117,9 @@ router.post('/', (req, res) => {
       amount_gross: round2(amountGross),
       vat_rate: vatRate,
       vat_amount: vatAmount,
+      original_currency: originalCurrency,
+      original_amount: originalAmount,
+      exchange_rate: exchangeRate,
       payment_method: b.payment_method || null,
       document_ref: b.document_ref || null,
       receipt_name: receiptName,
@@ -146,6 +156,7 @@ router.put('/:id', (req, res) => {
     `UPDATE expenses
         SET expense_date=@expense_date, category=@category, description=@description, supplier=@supplier,
             amount_gross=@amount_gross, vat_rate=@vat_rate, vat_amount=@vat_amount,
+            original_currency=@original_currency, original_amount=@original_amount, exchange_rate=@exchange_rate,
             payment_method=@payment_method, document_ref=@document_ref, receipt_name=@receipt_name,
             receipt_data=@receipt_data, notes=@notes,
             updated_at=datetime('now')
@@ -159,6 +170,9 @@ router.put('/:id', (req, res) => {
     amount_gross: round2(amountGross),
     vat_rate: vatRate,
     vat_amount: vatAmount,
+    original_currency: b.original_currency != null ? String(b.original_currency).trim().toUpperCase() : existing.original_currency,
+    original_amount: b.original_amount != null && b.original_amount !== '' ? Number(b.original_amount) : existing.original_amount,
+    exchange_rate: b.exchange_rate != null && b.exchange_rate !== '' ? Number(b.exchange_rate) : existing.exchange_rate,
     payment_method: b.payment_method ?? existing.payment_method,
     document_ref: b.document_ref ?? existing.document_ref,
     receipt_name: receiptName,

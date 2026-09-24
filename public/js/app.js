@@ -15,6 +15,7 @@ const CATEGORIES = [
   'Web Building', 'Web Maintenance', 'Server Maintenance', 'App Maintenance', 'Other',
 ];
 const BILLING_CYCLES = ['one-time', 'monthly', 'quarterly', 'yearly'];
+const CURRENCIES = ['EUR', 'USD', 'SGD', 'MMK', 'GBP', 'CHF', 'JPY', 'AUD', 'CAD', 'CNY', 'THB', 'INR'];
 
 async function api(method, path, body) {
   const opt = { method, headers: { 'Content-Type': 'application/json' } };
@@ -115,6 +116,7 @@ const MM = {
   'Gateway Fees': 'Gateway ကြေး', Categories: 'အမျိုးအစားများ', 'New category name': 'အမျိုးအစားအသစ် အမည်',
   Add: 'ထည့်မည်', 'Receipt (Beleg)': 'Beleg / ပြေစာ', View: 'ကြည့်မည်', Remove: 'ဖယ်ရှား',
   'Full Data Export': 'Data အပြည့် ထုတ်မည်',
+  'Exchange Rate': 'ငွေလဲနှုန်း', Currency: 'ငွေကြေး', 'Computed EUR': 'EUR တွက်ချက်မှု',
   // Settings
   'Company Logo': 'ကုမ္ပဏီ Logo', 'Company Details': 'ကုမ္ပဏီ အချက်အလက်', 'Billing Preferences': 'ငွေတောင်းခံမှု ဆက်တင်',
   Language: 'ဘာသာစကား', 'Save Settings': 'ဆက်တင် သိမ်းမည်', 'Remove logo': 'Logo ဖယ်ရှား',
@@ -528,7 +530,7 @@ async function renderExpenses() {
               <td>${esc(e.description || '')}</td>
               <td>${esc(e.supplier || '')}</td>
               <td class="num">${e.vat_rate}%</td>
-              <td class="num mono">€ ${fmt(e.amount_gross)}</td>
+              <td class="num mono">€ ${fmt(e.amount_gross)}${e.original_currency && e.original_currency !== 'EUR' ? `<div class="muted" style="font-size:11px">${esc(e.original_currency)} ${fmt(e.original_amount)} @ ${e.exchange_rate}</div>` : ''}</td>
               <td class="num" style="white-space:nowrap">
                 ${e.has_receipt ? `<button class="btn btn-sm" data-receipt="${e.id}" title="${t('Receipt (Beleg)')}">📎</button>` : ''}
                 ${canWrite() ? `<button class="btn btn-sm" data-edit="${e.id}">✏️</button>
@@ -569,6 +571,9 @@ async function editExpense(id) {
   const f = (k) => esc(ex[k] ?? '');
   let receiptData = ex.receipt_data || null;
   let receiptName = ex.receipt_name || null;
+  const origCurrency = (ex.original_currency || 'EUR').toUpperCase();
+  const amountValue = origCurrency === 'EUR' ? (ex.amount_gross ?? '') : (ex.original_amount ?? '');
+  const rateValue = origCurrency !== 'EUR' ? (ex.exchange_rate ?? '') : '';
   const hasCurrent = ex.category && !expenseCategories.some((c) => c.name === ex.category);
   const catOptions = [
     ...expenseCategories.map((c) => `<option value="${esc(c.name)}" ${ex.category === c.name ? 'selected' : ''}>${esc(c.name)}</option>`),
@@ -589,11 +594,19 @@ async function editExpense(id) {
         <div class="field"><label>${t('Document Ref')}</label><input id="x-doc" value="${f('document_ref')}"></div>
       </div>
       <div class="form-row-3">
-        <div class="field"><label>${t('Gross (€)')} *</label><input id="x-gross" type="number" step="0.01" value="${f('amount_gross')}"></div>
+        <div class="field"><label>${t('Currency')}</label>
+          <select id="x-currency">${CURRENCIES.map((c) => `<option value="${c}" ${origCurrency === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        </div>
+        <div class="field"><label id="x-amount-label">Amount (€)</label><input id="x-gross" type="number" step="0.01" value="${esc(amountValue)}"></div>
+        <div class="field" id="x-rate-field"><label>${t('Exchange Rate')} (1 = EUR)</label><input id="x-rate" type="number" step="0.0001" value="${esc(rateValue)}"></div>
+      </div>
+      <div class="field" id="x-eur-note"><label>${t('Computed EUR')}</label><span id="x-eur-val" class="mono">—</span></div>
+      <div class="form-row-3">
         <div class="field"><label>${t('VAT %')}</label><input id="x-vat" type="number" step="0.01" value="${f('vat_rate')}"></div>
         <div class="field"><label>${t('Method')}</label>
           <select id="x-method">${PAY_METHODS.map((m) => `<option value="${m}" ${ex.payment_method === m ? 'selected' : ''}>${methodIcon[m]} ${methodLabel(m)}</option>`).join('')}</select>
         </div>
+        <div class="field"></div>
       </div>
       <div class="field">
         <label>${t('Receipt (Beleg)')}</label>
@@ -605,6 +618,25 @@ async function editExpense(id) {
     footHTML: `<button class="btn" id="x-cancel">${t('Cancel')}</button><button class="btn btn-primary" id="x-save">${t('Save Expense')}</button>`,
   });
   $('#x-cancel').onclick = closeModal;
+
+  const toggleCurrency = () => {
+    const cur = $('#x-currency').value;
+    const isForeign = cur !== 'EUR';
+    $('#x-amount-label').textContent = isForeign ? `Amount (${cur})` : 'Amount (€)';
+    $('#x-rate-field').style.display = isForeign ? '' : 'none';
+    $('#x-eur-note').style.display = isForeign ? '' : 'none';
+    computeEur();
+  };
+  const computeEur = () => {
+    const cur = $('#x-currency').value;
+    const amt = +$('#x-gross').value || 0;
+    const rate = +$('#x-rate').value || 0;
+    $('#x-eur-val').textContent = (cur !== 'EUR' && amt > 0 && rate > 0) ? `€ ${fmt(amt * rate)}` : '—';
+  };
+  $('#x-currency').onchange = toggleCurrency;
+  $('#x-gross').oninput = computeEur;
+  $('#x-rate').oninput = computeEur;
+  toggleCurrency();
 
   const renderReceipt = () => {
     const box = $('#x-receipt-box');
@@ -631,12 +663,22 @@ async function editExpense(id) {
   };
 
   $('#x-save').onclick = async () => {
-    const amount = $('#x-gross').value;
-    if (!amount || Number(amount) <= 0) return toast('A positive amount is required', 'error');
+    const cur = $('#x-currency').value;
+    const amt = +$('#x-gross').value || 0;
+    if (amt <= 0) return toast('A positive amount is required', 'error');
+    let amountGross = amt, originalAmount = null, exchangeRate = null;
+    if (cur !== 'EUR') {
+      const rate = +$('#x-rate').value || 0;
+      if (rate <= 0) return toast('A positive exchange rate is required', 'error');
+      amountGross = amt * rate;
+      originalAmount = amt;
+      exchangeRate = rate;
+    }
     const payload = {
       expense_date: $('#x-date').value, category: $('#x-cat').value,
       description: $('#x-desc').value, supplier: $('#x-supplier').value,
-      amount_gross: amount, vat_rate: $('#x-vat').value,
+      amount_gross: amountGross, vat_rate: $('#x-vat').value,
+      original_currency: cur, original_amount: originalAmount, exchange_rate: exchangeRate,
       payment_method: $('#x-method').value, document_ref: $('#x-doc').value, notes: $('#x-notes').value,
       receipt_name: receiptName, receipt_data: receiptData,
     };
@@ -1034,16 +1076,29 @@ function addSettlement(inv) {
       </div>
       <div class="form-row">
         <div class="field"><label>${t('Billed Amount')}</label><input id="st-billed" type="number" step="0.01" value="${inv.total}"></div>
-        <div class="field"><label>${t('Billed Currency')}</label><input id="st-currency" value="${esc(inv.currency)}"></div>
+        <div class="field"><label>${t('Billed Currency')}</label>
+          <select id="st-currency">${CURRENCIES.map((c) => `<option value="${c}" ${inv.currency === c ? 'selected' : ''}>${c}</option>`).join('')}</select>
+        </div>
       </div>
       <div class="form-row">
+        <div class="field"><label>${t('Exchange Rate')} (1 = EUR)</label><input id="st-rate" type="number" step="0.0001" placeholder="e.g. 0.92"></div>
         <div class="field"><label>Settled Amount (EUR)</label><input id="st-eur" type="number" step="0.01"></div>
+      </div>
+      <div class="form-row">
         <div class="field"><label>Gateway Fee (EUR)</label><input id="st-fee" type="number" step="0.01" value="0"></div>
+        <div class="field"></div>
       </div>
       <div class="field"><label>${t('Reference')}</label><input id="st-ref"></div>`,
     footHTML: `<button class="btn" id="st-cancel">${t('Cancel')}</button><button class="btn btn-primary" id="st-save">${t('Save')}</button>`,
   });
   $('#st-cancel').onclick = () => { closeModal(); viewInvoice(inv.id); };
+  const recalc = () => {
+    const billed = +$('#st-billed').value || 0;
+    const rate = +$('#st-rate').value || 0;
+    if (rate > 0) $('#st-eur').value = (billed * rate).toFixed(2);
+  };
+  $('#st-rate').oninput = recalc;
+  $('#st-billed').oninput = recalc;
   $('#st-save').onclick = async () => {
     try {
       await post('/settlements', {
@@ -1052,6 +1107,7 @@ function addSettlement(inv) {
         billed_amount: $('#st-billed').value,
         billed_currency: $('#st-currency').value,
         settled_amount_eur: $('#st-eur').value,
+        exchange_rate: $('#st-rate').value || null,
         gateway_fee_eur: $('#st-fee').value,
         payment_method: $('#st-method').value,
         transaction_ref: $('#st-ref').value,

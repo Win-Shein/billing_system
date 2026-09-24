@@ -9,6 +9,7 @@
 
 const express = require('express');
 const db = require('../db/database');
+const { round2 } = require('../lib/euerCategories');
 
 const router = express.Router();
 
@@ -48,14 +49,26 @@ router.post('/', (req, res) => {
   const billedAmount = Number(b.billed_amount);
   if (!billedAmount && billedAmount !== 0) return res.status(400).json({ error: 'billed_amount is required' });
   if (!b.billed_currency) return res.status(400).json({ error: 'billed_currency is required' });
-  const settledEur = Number(b.settled_amount_eur);
-  if (Number.isNaN(settledEur)) return res.status(400).json({ error: 'settled_amount_eur is required' });
+
+  // settled_amount_eur can be given directly, or computed from the
+  // exchange rate (1 billed currency unit = X EUR). The rate is always
+  // stored for documentation (Finanzamt).
+  const exchangeRate = b.exchange_rate != null && b.exchange_rate !== '' ? Number(b.exchange_rate) : null;
+  let settledEur;
+  if (b.settled_amount_eur != null && b.settled_amount_eur !== '') {
+    settledEur = Number(b.settled_amount_eur);
+  } else if (exchangeRate != null && exchangeRate > 0) {
+    settledEur = round2(billedAmount * exchangeRate);
+  } else {
+    return res.status(400).json({ error: 'settled_amount_eur or a positive exchange_rate is required' });
+  }
+  if (Number.isNaN(settledEur)) return res.status(400).json({ error: 'settled_amount_eur is invalid' });
 
   const info = db
     .prepare(
       `INSERT INTO payment_settlements
-         (org_id, invoice_id, settlement_date, billed_amount, billed_currency, settled_amount_eur, payment_method, gateway_fee_eur, transaction_ref)
-       VALUES (@org, @invoice_id, @settlement_date, @billed_amount, @billed_currency, @settled_amount_eur, @payment_method, @gateway_fee_eur, @transaction_ref)`
+         (org_id, invoice_id, settlement_date, billed_amount, billed_currency, settled_amount_eur, payment_method, gateway_fee_eur, exchange_rate, transaction_ref)
+       VALUES (@org, @invoice_id, @settlement_date, @billed_amount, @billed_currency, @settled_amount_eur, @payment_method, @gateway_fee_eur, @exchange_rate, @transaction_ref)`
     )
     .run({
       org: req.orgId,
@@ -66,6 +79,7 @@ router.post('/', (req, res) => {
       settled_amount_eur: settledEur,
       payment_method: b.payment_method || null,
       gateway_fee_eur: Number(b.gateway_fee_eur) || 0,
+      exchange_rate: exchangeRate,
       transaction_ref: b.transaction_ref || null,
     });
 

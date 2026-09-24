@@ -93,6 +93,12 @@ function migrate(raw) {
   addColumn(raw, 'expenses', 'receipt_name', 'TEXT');
   addColumn(raw, 'expenses', 'receipt_data', 'TEXT');
 
+  /* ---- multi-currency: exchange rates ------------------------------------ */
+  addColumn(raw, 'payment_settlements', 'exchange_rate', 'REAL');
+  addColumn(raw, 'expenses', 'original_currency', "TEXT NOT NULL DEFAULT 'EUR'");
+  addColumn(raw, 'expenses', 'original_amount', 'REAL');
+  addColumn(raw, 'expenses', 'exchange_rate', 'REAL');
+
   /* ---- expense_categories: user-editable EÜR categories ------------------ */
   raw.exec(`
     CREATE TABLE IF NOT EXISTS expense_categories (

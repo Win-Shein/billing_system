@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS payment_settlements (
   settled_amount_eur REAL    NOT NULL,               -- reported to Finanzamt
   payment_method     TEXT,                           -- 'Wise', 'Bank Transfer', 'Stripe', ...
   gateway_fee_eur    REAL    NOT NULL DEFAULT 0,      -- deductible Betriebsausgabe
+  exchange_rate      REAL,                            -- billed_currency → EUR rate (documentation)
   transaction_ref    TEXT,
   created_at         TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -205,9 +206,12 @@ CREATE TABLE IF NOT EXISTS expenses (
   category       TEXT    NOT NULL,                -- EÜR / Kontenrahmen category
   description    TEXT,
   supplier       TEXT,                            -- Lieferant
-  amount_gross   REAL    NOT NULL DEFAULT 0,       -- Brutto (what left the account)
+  amount_gross   REAL    NOT NULL DEFAULT 0,       -- Brutto in EUR (what left the account)
   vat_rate       REAL    NOT NULL DEFAULT 0,       -- VAT %
   vat_amount     REAL    NOT NULL DEFAULT 0,       -- Vorsteuer portion
+  original_currency TEXT NOT NULL DEFAULT 'EUR',   -- currency actually paid in (SGD, USD, ...)
+  original_amount   REAL,                          -- gross amount in original_currency
+  exchange_rate     REAL,                          -- original_currency → EUR rate
   payment_method TEXT,
   document_ref   TEXT,                            -- Belegnummer / receipt reference (GoBD)
   receipt_name   TEXT,                            -- original receipt filename (Beleg)
