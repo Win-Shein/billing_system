@@ -114,6 +114,7 @@ const MM = {
   'Net Profit': 'အသားတင်အမြတ်', 'Expenses & Profit (EÜR)': 'ကုန်ကျစရိတ် & အမြတ် (EÜR)',
   'Gateway Fees': 'Gateway ကြေး', Categories: 'အမျိုးအစားများ', 'New category name': 'အမျိုးအစားအသစ် အမည်',
   Add: 'ထည့်မည်', 'Receipt (Beleg)': 'Beleg / ပြေစာ', View: 'ကြည့်မည်', Remove: 'ဖယ်ရှား',
+  'Full Data Export': 'Data အပြည့် ထုတ်မည်',
   // Settings
   'Company Logo': 'ကုမ္ပဏီ Logo', 'Company Details': 'ကုမ္ပဏီ အချက်အလက်', 'Billing Preferences': 'ငွေတောင်းခံမှု ဆက်တင်',
   Language: 'ဘာသာစကား', 'Save Settings': 'ဆက်တင် သိမ်းမည်', 'Remove logo': 'Logo ဖယ်ရှား',
@@ -1171,6 +1172,7 @@ route('reports', async () => {
       <button class="btn btn-sm" id="rep-all">${t('All')}</button>
       <span class="spacer"></span>
       <button class="btn btn-sm" id="rep-tax-export">📑 ${t('EÜR Export')}</button>
+      <button class="btn btn-sm" id="rep-full-export">🗄️ ${t('Full Data Export')}</button>
     </div>
 
     <div class="grid-3">
@@ -1259,6 +1261,7 @@ route('reports', async () => {
     if (repTo) eq.set('to', repTo);
     window.open('/api/reports/euer-export' + (eq.toString() ? '?' + eq.toString() : ''), '_blank');
   };
+  $('#rep-full-export').onclick = () => window.open('/api/reports/full-export', '_blank');
   $('#rep-export-month').onclick = () => exportCSV(
     `monthly_summary_${repFrom || 'all'}_${repTo || 'all'}.csv`,
     ['#', 'Month', 'Invoices', 'Billed', 'Collected', 'Outstanding'],

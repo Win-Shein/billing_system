@@ -263,4 +263,53 @@ router.get('/euer-export', (req, res) => {
   res.send(csv);
 });
 
+// Full machine-readable data export (GoBD §147 AO — Datenzugriff, Z3
+// Datenträgerüberlassung). Dumps every business table for the org as JSON so
+// an auditor (or DATEV/IDEA import) can read the complete dataset.
+// Security note: password hashes, session rows and the logo image are
+// intentionally excluded — they are not tax-relevant business data.
+router.get('/full-export', (req, res) => {
+  const org = req.orgId;
+  const orgRow = db.prepare('SELECT id, name, created_at FROM organizations WHERE id = ?').get(org);
+
+  const data = {
+    organizations: db.prepare('SELECT id, name, created_at FROM organizations WHERE id = ?').all(org),
+    settings: db.prepare(
+      `SELECT org_id, company_name, email, phone, address, city, country, tax_number,
+              currency, currency_symbol, default_tax, invoice_prefix, invoice_next, language,
+              notes, is_kleinunternehmer, bank_name, bank_iban, bank_bic, bank_account_holder,
+              updated_at
+         FROM settings WHERE org_id = ?`
+    ).all(org),
+    users: db.prepare('SELECT id, org_id, email, name, is_active, last_login, created_at FROM users WHERE org_id = ?').all(org),
+    customers: db.prepare('SELECT * FROM customers WHERE org_id = ?').all(org),
+    items: db.prepare('SELECT * FROM items WHERE org_id = ?').all(org),
+    expense_categories: db.prepare('SELECT * FROM expense_categories WHERE org_id = ?').all(org),
+    expenses: db.prepare('SELECT * FROM expenses WHERE org_id = ?').all(org),
+    invoices: db.prepare('SELECT * FROM invoices WHERE org_id = ?').all(org),
+    invoice_items: db.prepare(
+      `SELECT ii.* FROM invoice_items ii JOIN invoices i ON i.id = ii.invoice_id WHERE i.org_id = ?`
+    ).all(org),
+    payments: db.prepare('SELECT * FROM payments WHERE org_id = ?').all(org),
+    payment_settlements: db.prepare('SELECT * FROM payment_settlements WHERE org_id = ?').all(org),
+    invoice_sequences: db.prepare('SELECT * FROM invoice_sequences WHERE org_id = ?').all(org),
+  };
+
+  const payload = {
+    meta: {
+      system: 'Billing System',
+      version: require('../package.json').version,
+      exported_at: new Date().toISOString(),
+      organization: orgRow ? orgRow.name : null,
+      note: 'GoBD §147 AO — Datenzugriff (Z3 Datenträgerüberlassung), machine-readable JSON',
+    },
+    data,
+  };
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="goebd-full-export_${stamp}.json"`);
+  res.send(JSON.stringify(payload, null, 2));
+});
+
 module.exports = router;
